@@ -8,6 +8,7 @@ use num_integer::div_floor;
 use hdf5_sys::h5d::{H5Dget_chunk_info, H5Dget_num_chunks};
 use hdf5_sys::{
     h5::HADDR_UNDEF,
+    h5a::H5Aopen,
     h5d::{
         H5D_fill_value_t, H5D_layout_t, H5Dcreate2, H5Dcreate_anon, H5Dget_create_plist,
         H5Dget_offset, H5Dset_extent, H5D_FILL_TIME_ALLOC,
@@ -223,6 +224,15 @@ impl Dataset {
         }
         h5try!(H5Dset_extent(self.id(), dims.as_ptr()));
         Ok(())
+    }
+
+    pub fn new_attribute<T: H5Type>(&self) -> AttributeBuilder<T> {
+        AttributeBuilder::<T>::new_from_dataset(self)
+    }
+
+    pub fn attribute(&self, name: &str) -> Result<Attribute> {
+        let name = to_cstring(name)?;
+        Attribute::from_id(h5try!(H5Aopen(self.id(), name.as_ptr(), H5P_DEFAULT)))
     }
 }
 

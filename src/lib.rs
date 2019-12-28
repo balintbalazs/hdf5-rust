@@ -29,7 +29,8 @@ mod export {
         error::{silence_errors, Error, Result},
         filters::Filters,
         hl::{
-            Container, Conversion, Dataset, DatasetBuilder, Dataspace, Datatype, File, FileBuilder,
+            Container, Conversion, Dataset, Attribute, AttributeBuilder, 
+            DatasetBuilder, Dataspace, Datatype, File, FileBuilder,
             Group, Location, Object, PropertyList, Reader, Writer,
         },
     };
