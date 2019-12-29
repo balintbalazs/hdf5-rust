@@ -138,13 +138,9 @@ impl<T: H5Type> AttributeBuilder<T> {
 }
 
 #[cfg(test)]
-pub mod tests {
-    use std::fs;
-    use std::io::Read;
-
-    use hdf5_sys::{h5d::H5Dwrite, h5s::H5S_ALL};
-
+pub mod attribute_tests {
     use crate::internal_prelude::*;
+    use ndarray::{arr2, Array2};
 
     #[test]
     pub fn test_shape_ndim_size() {
@@ -164,197 +160,43 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_filters() {
-        with_tmp_file(|file| {
-            assert_eq!(
-                file.new_dataset::<u32>().create_anon(100).unwrap().filters(),
-                Filters::default()
-            );
-            assert_eq!(
-                file.new_dataset::<u32>()
-                    .shuffle(true)
-                    .create_anon(100)
-                    .unwrap()
-                    .filters()
-                    .get_shuffle(),
-                true
-            );
-            assert_eq!(
-                file.new_dataset::<u32>()
-                    .fletcher32(true)
-                    .create_anon(100)
-                    .unwrap()
-                    .filters()
-                    .get_fletcher32(),
-                true
-            );
-            assert_eq!(
-                file.new_dataset::<u32>()
-                    .scale_offset(8)
-                    .create_anon(100)
-                    .unwrap()
-                    .filters()
-                    .get_scale_offset(),
-                Some(8)
-            );
-        });
-
-        with_tmp_file(|file| {
-            let filters = Filters::new().fletcher32(true).shuffle(true).clone();
-            assert_eq!(
-                file.new_dataset::<u32>().filters(&filters).create_anon(100).unwrap().filters(),
-                filters
-            );
-        })
-    }
-
-    #[test]
-    pub fn test_resizable() {
-        with_tmp_file(|file| {
-            assert_eq!(file.new_dataset::<u32>().create_anon(1).unwrap().is_resizable(), false);
-            assert_eq!(
-                file.new_dataset::<u32>().resizable(false).create_anon(1).unwrap().is_resizable(),
-                false
-            );
-            assert_eq!(
-                file.new_dataset::<u32>().resizable(true).create_anon(1).unwrap().is_resizable(),
-                true
-            );
-        })
-    }
-
-    #[test]
-    pub fn test_track_times() {
-        with_tmp_file(|file| {
-            assert_eq!(file.new_dataset::<u32>().create_anon(1).unwrap().tracks_times(), false);
-            assert_eq!(
-                file.new_dataset::<u32>().track_times(false).create_anon(1).unwrap().tracks_times(),
-                false
-            );
-            assert_eq!(
-                file.new_dataset::<u32>().track_times(true).create_anon(1).unwrap().tracks_times(),
-                true
-            );
-        });
-
-        with_tmp_path(|path| {
-            let mut buf1: Vec<u8> = Vec::new();
-            File::create(&path).unwrap().new_dataset::<u32>().create("foo", 1).unwrap();
-            fs::File::open(&path).unwrap().read_to_end(&mut buf1).unwrap();
-
-            let mut buf2: Vec<u8> = Vec::new();
-            File::create(&path)
-                .unwrap()
-                .new_dataset::<u32>()
-                .track_times(false)
-                .create("foo", 1)
-                .unwrap();
-            fs::File::open(&path).unwrap().read_to_end(&mut buf2).unwrap();
-
-            assert_eq!(buf1, buf2);
-
-            let mut buf2: Vec<u8> = Vec::new();
-            File::create(&path)
-                .unwrap()
-                .new_dataset::<u32>()
-                .track_times(true)
-                .create("foo", 1)
-                .unwrap();
-            fs::File::open(&path).unwrap().read_to_end(&mut buf2).unwrap();
-            assert_ne!(buf1, buf2);
-        });
-    }
-
-    #[test]
-    pub fn test_storage_size_offset() {
-        with_tmp_file(|file| {
-            let ds = file.new_dataset::<u16>().create_anon(3).unwrap();
-            assert_eq!(ds.storage_size(), 0);
-            assert!(ds.offset().is_none());
-
-            let buf: Vec<u16> = vec![1, 2, 3];
-            h5call!(H5Dwrite(
-                ds.id(),
-                Datatype::from_type::<u16>().unwrap().id(),
-                H5S_ALL,
-                H5S_ALL,
-                H5P_DEFAULT,
-                buf.as_ptr() as *const _
-            ))
-            .unwrap();
-            assert_eq!(ds.storage_size(), 6);
-            assert!(ds.offset().is_some());
-        })
-    }
-
-    #[test]
     pub fn test_datatype() {
         with_tmp_file(|file| {
             assert_eq!(
-                file.new_dataset::<f32>().create_anon(1).unwrap().dtype().unwrap(),
+                file.new_attribute::<f32>().create("name", 1).unwrap().dtype().unwrap(),
                 Datatype::from_type::<f32>().unwrap()
             );
         })
     }
 
     #[test]
-    pub fn test_create_anon() {
+    pub fn test_read_write() {
         with_tmp_file(|file| {
-            let ds = file.new_dataset::<u32>().create("foo/bar", (1, 2)).unwrap();
-            assert!(ds.is_valid());
-            assert_eq!(ds.shape(), vec![1, 2]);
-            assert_eq!(ds.name(), "/foo/bar");
-            assert_eq!(file.group("foo").unwrap().dataset("bar").unwrap().shape(), vec![1, 2]);
 
-            let ds = file.new_dataset::<u32>().create_anon((2, 3)).unwrap();
-            assert!(ds.is_valid());
-            assert_eq!(ds.name(), "");
-            assert_eq!(ds.shape(), vec![2, 3]);
+            let arr = arr2(&[[1, 2, 3], [4, 5, 6]]);
+
+            let attr = file.new_attribute::<f32>().create("foo", (2, 3)).unwrap();
+            attr.as_writer().write(&arr).unwrap();
+
+            let read_attr = file.attribute("foo").unwrap();
+            assert_eq!(read_attr.shape(), vec![2, 3]);
+
+            let arr_dyn: Array2<_> = read_attr.as_reader().read().unwrap();
+
+            assert_eq!(arr, arr_dyn.into_dimensionality().unwrap());
         })
     }
 
     #[test]
-    pub fn test_fill_value() {
+    pub fn test_create() {
         with_tmp_file(|file| {
-            macro_rules! check_fill_value {
-                ($ds:expr, $tp:ty, $v:expr) => {
-                    assert_eq!(($ds).fill_value::<$tp>().unwrap(), Some(($v) as $tp));
-                };
-            }
-
-            macro_rules! check_fill_value_approx {
-                ($ds:expr, $tp:ty, $v:expr) => {{
-                    let fill_value = ($ds).fill_value::<$tp>().unwrap().unwrap();
-                    // FIXME: should inexact float->float casts be prohibited?
-                    assert!((fill_value - (($v) as $tp)).abs() < (1.0e-6 as $tp));
-                }};
-            }
-
-            macro_rules! check_all_fill_values {
-                ($ds:expr, $v:expr) => {
-                    check_fill_value!($ds, u8, $v);
-                    check_fill_value!($ds, u16, $v);
-                    check_fill_value!($ds, u32, $v);
-                    check_fill_value!($ds, u64, $v);
-                    check_fill_value!($ds, i8, $v);
-                    check_fill_value!($ds, i16, $v);
-                    check_fill_value!($ds, i32, $v);
-                    check_fill_value!($ds, i64, $v);
-                    check_fill_value!($ds, usize, $v);
-                    check_fill_value!($ds, isize, $v);
-                    check_fill_value_approx!($ds, f32, $v);
-                    check_fill_value_approx!($ds, f64, $v);
-                };
-            }
-
-            let ds = file.new_dataset::<u16>().create_anon(100).unwrap();
-            check_all_fill_values!(ds, 0);
-
-            let ds = file.new_dataset::<u16>().fill_value(42).create_anon(100).unwrap();
-            check_all_fill_values!(ds, 42);
-
-            let ds = file.new_dataset::<f32>().fill_value(1.234).create_anon(100).unwrap();
-            check_all_fill_values!(ds, 1.234);
+            let attr = file.new_attribute::<u32>().create("foo", (1, 2)).unwrap();
+            assert!(attr.is_valid());
+            assert_eq!(attr.shape(), vec![1, 2]);
+            // FIXME - attr.name() returns "/" here, which is the name the attribute is connected to,
+            // not the name of the attribute.
+            //assert_eq!(attr.name(), "foo");
+            assert_eq!(file.attribute("foo").unwrap().shape(), vec![1, 2]);
         })
     }
 }
