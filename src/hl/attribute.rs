@@ -2,8 +2,8 @@ use std::fmt::{self, Debug};
 use std::ops::Deref;
 
 use hdf5_sys::{
-    h5a::{ H5Acreate2, 
-    },
+    h5::{hsize_t, H5_index_t, H5_iter_order_t},
+    h5a::{H5A_info_t, H5A_operator2_t, H5Acreate2, H5Aiterate2},
 };
 
 use crate::internal_prelude::*;
@@ -43,7 +43,34 @@ impl Deref for Attribute {
 }
 
 impl Attribute {
+    /// Returns names of all the members in the group, non-recursively.
+    pub fn attribute_names<T: ObjectClass>(obj: &T) -> Result<Vec<String>> {
+        extern "C" fn attributes_callback(
+            _id: hid_t, attr_name: *const c_char, _info: *const H5A_info_t, op_data: *mut c_void,
+        ) -> herr_t {
+            let other_data: &mut Vec<String> = unsafe { &mut *(op_data as *mut Vec<String>) };
 
+            other_data.push(string_from_cstr(attr_name));
+
+            0 // Continue iteration
+        }
+
+        let callback_fn: H5A_operator2_t = Some(attributes_callback);
+        let iteration_position: *mut hsize_t = &mut { 0 as u64 };
+        let mut result: Vec<String> = Vec::new();
+        let other_data: *mut c_void = &mut result as *mut _ as *mut c_void;
+
+        h5call!(H5Aiterate2(
+            obj.handle().id(),
+            H5_index_t::H5_INDEX_NAME,
+            H5_iter_order_t::H5_ITER_INC,
+            iteration_position,
+            callback_fn,
+            other_data
+        ))?;
+
+        Ok(result)
+    }
 }
 
 #[derive(Clone)]
@@ -160,6 +187,34 @@ pub mod attribute_tests {
     }
 
     #[test]
+    pub fn test_get_file_attribute_names() {
+        with_tmp_file(|file| {
+            let _ = file.new_attribute::<f32>().create("name1", (2, 3)).unwrap();
+            let _ = file.new_attribute::<u8>().create("name2", ()).unwrap();
+
+            let attr_names = file.attribute_names().unwrap();
+            assert_eq!(attr_names.len(), 2);
+            assert!(attr_names.contains(&"name1".to_string()));
+            assert!(attr_names.contains(&"name2".to_string()));
+        })
+    }
+
+    #[test]
+    pub fn test_get_dataset_attribute_names() {
+        with_tmp_file(|file| {
+            let ds = file.new_dataset::<u32>().create("d1", (10, 10)).unwrap();
+
+            let _ = ds.new_attribute::<f32>().create("name1", (2, 3)).unwrap();
+            let _ = ds.new_attribute::<u8>().create("name2", ()).unwrap();
+
+            let attr_names = ds.attribute_names().unwrap();
+            assert_eq!(attr_names.len(), 2);
+            assert!(attr_names.contains(&"name1".to_string()));
+            assert!(attr_names.contains(&"name2".to_string()));
+        })
+    }
+
+    #[test]
     pub fn test_datatype() {
         with_tmp_file(|file| {
             assert_eq!(
@@ -172,7 +227,6 @@ pub mod attribute_tests {
     #[test]
     pub fn test_read_write() {
         with_tmp_file(|file| {
-
             let arr = arr2(&[[1, 2, 3], [4, 5, 6]]);
 
             let attr = file.new_attribute::<f32>().create("foo", (2, 3)).unwrap();

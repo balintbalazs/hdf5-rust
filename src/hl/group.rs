@@ -210,6 +210,10 @@ impl Group {
 
         Ok(result)
     }
+
+    pub fn attribute_names(&self) -> Result<Vec<String>> {
+        Attribute::attribute_names(self)
+    }
 }
 
 #[cfg(test)]
