@@ -167,6 +167,8 @@ impl<T: H5Type> AttributeBuilder<T> {
 pub mod attribute_tests {
     use crate::internal_prelude::*;
     use ndarray::{arr2, Array2};
+    use types::VarLenUnicode;
+    use std::str::FromStr;
 
     #[test]
     pub fn test_shape_ndim_size() {
@@ -250,6 +252,22 @@ pub mod attribute_tests {
             // not the name of the attribute.
             //assert_eq!(attr.name(), "foo");
             assert_eq!(file.attribute("foo").unwrap().shape(), vec![1, 2]);
+        })
+    }
+    #[test]
+    pub fn test_write_read_str() {
+        with_tmp_file(|file| {
+            let s = VarLenUnicode::from_str("var len foo").unwrap();
+
+            let attr = file.new_attribute::<VarLenUnicode>().create("foo", ()).unwrap();
+            attr.as_writer().write_scalar(&s).unwrap();
+
+            let read_attr = file.attribute("foo").unwrap();
+            assert_eq!(read_attr.shape(), []);
+
+            let r: VarLenUnicode = read_attr.as_reader().read_scalar().unwrap();
+
+            assert_eq!(r, s);
         })
     }
 }
