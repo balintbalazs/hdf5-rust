@@ -132,19 +132,18 @@ impl<T: H5Type> AttributeBuilder<T> {
         self
     }
 
-    fn finalize<S: Into<Extents>>(&self, name: &str, extents: S) -> Result<Attribute> {
+    fn finalize<D: Dimension>(&self, name: &str, dims: D) -> Result<Attribute> {
         let type_descriptor = if self.packed {
             <T as H5Type>::type_descriptor().to_packed_repr()
         } else {
             <T as H5Type>::type_descriptor().to_c_repr()
         };
-        let extents = extents.into();
 
         h5lock!({
             let datatype = Datatype::from_descriptor(&type_descriptor)?;
             let parent = try_ref_clone!(self.parent);
 
-            let dataspace = Dataspace::try_new(extents)?;
+            let dataspace = Dataspace::try_new(dims, false)?;
 
             let name = to_cstring(name)?;
             Attribute::from_id(h5try!(H5Acreate2(
@@ -159,8 +158,8 @@ impl<T: H5Type> AttributeBuilder<T> {
     }
 
     /// Create the dataset and link it into the file structure.
-    pub fn create<S: Into<Extents>>(&self, name: &str, shape: S) -> Result<Attribute> {
-        self.finalize(name, shape)
+    pub fn create<D: Dimension>(&self, name: &str, d: D) -> Result<Attribute> {
+        self.finalize(name, d)
     }
 }
 
