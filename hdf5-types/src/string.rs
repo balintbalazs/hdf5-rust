@@ -13,12 +13,11 @@ use ascii::{AsAsciiStr, AsAsciiStrError, AsciiStr};
 use crate::array::Array;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
 pub enum StringError {
     InternalNull,
     InsufficientCapacity,
     AsciiError(AsAsciiStrError),
-    #[doc(hidden)]
-    __Incomplete,
 }
 
 impl From<AsAsciiStrError> for StringError {
@@ -39,7 +38,6 @@ impl fmt::Display for StringError {
                 write!(f, "string error: insufficient capacity for fixed sized string")
             }
             StringError::AsciiError(err) => write!(f, "string error: {}", err),
-            _ => write!(f, ""),
         }
     }
 }
@@ -245,7 +243,7 @@ impl VarLenAscii {
 
     #[inline]
     pub fn as_str(&self) -> &str {
-        unsafe { mem::transmute(self.as_bytes()) }
+        unsafe { str::from_utf8_unchecked(self.as_bytes()) }
     }
 
     #[inline]
@@ -439,7 +437,7 @@ impl<A: Array<Item = u8>> FixedAscii<A> {
 
     #[inline]
     pub fn as_str(&self) -> &str {
-        unsafe { mem::transmute(self.as_bytes()) }
+        unsafe { str::from_utf8_unchecked(self.as_bytes()) }
     }
 
     #[inline]
@@ -549,7 +547,7 @@ impl<A: Array<Item = u8>> FixedUnicode<A> {
 
     #[inline]
     pub fn as_str(&self) -> &str {
-        unsafe { mem::transmute(self.as_bytes()) }
+        unsafe { str::from_utf8_unchecked(self.as_bytes()) }
     }
 
     #[inline]

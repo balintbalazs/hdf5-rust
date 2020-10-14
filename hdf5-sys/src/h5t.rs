@@ -336,7 +336,7 @@ extern "C" {
 
 pub use self::globals::*;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(not(all(target_env = "msvc", not(feature = "static"))))]
 mod globals {
     pub use crate::h5i::hid_t as id_t;
 
@@ -426,9 +426,11 @@ mod globals {
     extern_static!(H5T_NATIVE_UINT_LEAST64, H5T_NATIVE_UINT_LEAST64_g);
     extern_static!(H5T_NATIVE_INT_FAST64, H5T_NATIVE_INT_FAST64_g);
     extern_static!(H5T_NATIVE_UINT_FAST64, H5T_NATIVE_UINT_FAST64_g);
+    #[cfg(hdf5_1_12_0)]
+    extern_static!(H5T_STD_REF, H5T_STD_REF_g);
 }
 
-#[cfg(target_env = "msvc")]
+#[cfg(all(target_env = "msvc", not(feature = "static")))]
 mod globals {
     // dllimport hack
     pub type id_t = usize;
@@ -519,10 +521,17 @@ mod globals {
     extern_static!(H5T_NATIVE_UINT_LEAST64, __imp_H5T_NATIVE_UINT_LEAST64_g);
     extern_static!(H5T_NATIVE_INT_FAST64, __imp_H5T_NATIVE_INT_FAST64_g);
     extern_static!(H5T_NATIVE_UINT_FAST64, __imp_H5T_NATIVE_UINT_FAST64_g);
+    #[cfg(hdf5_1_12_0)]
+    extern_static!(H5T_STD_REF, __imp_H5T_STD_REF_g);
 }
 
 #[cfg(hdf5_1_10_0)]
 extern "C" {
     pub fn H5Tflush(type_id: hid_t) -> herr_t;
     pub fn H5Trefresh(type_id: hid_t) -> herr_t;
+}
+
+#[cfg(hdf5_1_12_0)]
+extern "C" {
+    pub fn H5Treclaim(type_id: hid_t, space_id: hid_t, dxpl_id: hid_t, buf: *mut c_void) -> herr_t;
 }

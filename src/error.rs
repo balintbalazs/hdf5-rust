@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::error::Error as StdError;
 use std::fmt;
 use std::ops::Index;
+use std::panic;
 use std::ptr;
 
 use lazy_static::lazy_static;
@@ -65,7 +66,7 @@ lazy_static! {
 }
 
 extern "C" fn default_error_handler(estack: hid_t, _cdata: *mut c_void) -> herr_t {
-    unsafe { H5Eprint2(estack, ptr::null_mut()) }
+    panic::catch_unwind(|| unsafe { H5Eprint2(estack, ptr::null_mut()) }).unwrap_or(-1)
 }
 
 impl SilenceErrors {
@@ -134,7 +135,7 @@ impl ErrorStack {
         extern "C" fn callback(
             _: c_uint, err_desc: *const H5E_error2_t, data: *mut c_void,
         ) -> herr_t {
-            unsafe {
+            panic::catch_unwind(|| unsafe {
                 let data = &mut *(data as *mut CallbackData);
                 if data.err.is_some() {
                     return 0;
@@ -154,7 +155,8 @@ impl ErrorStack {
                     }
                 }
                 0
-            }
+            })
+            .unwrap_or(-1)
         }
 
         let mut data = CallbackData { stack: Self::new(), err: None };
@@ -385,23 +387,17 @@ pub mod tests {
         let _e = silence_errors();
 
         fn f1() -> Result<herr_t> {
-            let plist_id = h5try!(H5Pcreate(*H5P_ROOT));
-            h5try!(H5Pclose(plist_id));
+            h5try!(H5Pcreate(*H5P_ROOT));
             Ok(100)
         }
 
-        let result1 = f1();
-        assert!(result1.is_ok());
-        assert_eq!(result1.ok().unwrap(), 100);
+        assert_eq!(f1().unwrap(), 100);
 
         fn f2() -> Result<herr_t> {
-            let plist_id = h5try!(H5Pcreate(*H5P_ROOT));
-            h5try!(H5Pclose(plist_id));
-            h5try!(H5Pclose(plist_id));
+            h5try!(H5Pcreate(123456));
             Ok(100)
         }
 
-        let result2 = f2();
-        assert!(result2.is_err());
+        assert!(f2().is_err());
     }
 }

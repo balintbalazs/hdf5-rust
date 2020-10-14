@@ -1,5 +1,6 @@
 use std::fmt::{self, Debug};
 use std::ops::Deref;
+use std::panic;
 
 use hdf5_sys::{
     h5::{hsize_t, H5_index_t, H5_iter_order_t},
@@ -206,11 +207,14 @@ impl Group {
         extern "C" fn members_callback(
             _id: hid_t, name: *const c_char, _info: *const H5L_info_t, op_data: *mut c_void,
         ) -> herr_t {
-            let other_data: &mut Vec<String> = unsafe { &mut *(op_data as *mut Vec<String>) };
+            panic::catch_unwind(|| {
+                let other_data: &mut Vec<String> = unsafe { &mut *(op_data as *mut Vec<String>) };
 
-            other_data.push(string_from_cstr(name));
+                other_data.push(string_from_cstr(name));
 
-            0 // Continue iteration
+                0 // Continue iteration
+            })
+            .unwrap_or(-1)
         }
 
         let callback_fn: H5L_iterate_t = Some(members_callback);
@@ -317,13 +321,13 @@ pub mod tests {
             file.link_hard("/foo/test", "/foo/hard").unwrap();
             file.group("foo/test/inner").unwrap();
             file.group("/foo/hard/inner").unwrap();
-            assert_err!(
+            assert_err_re!(
                 file.link_hard("foo/test", "/foo/test/inner"),
-                "unable to create link: name already exists"
+                "unable to create (?:hard )?link: name already exists"
             );
             assert_err_re!(
                 file.link_hard("foo/bar", "/foo/baz"),
-                "unable to create link: object.+doesn't exist"
+                "unable to create (?:hard )?link: object.+doesn't exist"
             );
             file.relink("/foo/hard", "/foo/hard2").unwrap();
             file.group("/foo/hard2/inner").unwrap();
